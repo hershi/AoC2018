@@ -32,11 +32,9 @@ fn main() {
 
     println!("Result {:?}", res.0 * res.1);
 
-    'outer: for x in input.clone() {
-        for y in input.clone() {
-            let count = x.chars().zip(y.chars()).filter(|x| x.0 != x.1).count();
-            //println!("{}:{} - {} diffs", x, y, count);
-            if (count == 1) {
+    'outer: for (i, x) in input.iter().enumerate() {
+        for y in input.iter().skip(i) {
+            if x.chars().zip(y.chars()).filter(|x| x.0 != x.1).count() == 1 {
                 println!("{}:{} - diffs\n{}", x, y, x.chars().zip(y.chars()).filter(|x| x.0 == x.1).map(|x| x.0).collect::<String>());
                 break 'outer;
             }
