@@ -13,18 +13,16 @@ fn read_input() -> Vec<i32> {
 
 fn main() {
     let input = read_input();
-    let sum = input.iter().fold(0, |acc, x| acc + x);
+    let sum: i32 = input.iter().sum();
 
     let mut seen = HashSet::new();
     let mut current_freq = 0;
-    let mut i = 0;
     for x in input.iter().cycle() {
         if !seen.insert(current_freq) { break; }
         current_freq += x;
-        i +=1;
     }
 
     println!("Input size : {}", input.len());
     println!("Result 1: {}", sum);
-    println!("Result 2: {} ({} iterations)", current_freq, i);
+    println!("Result 2: {}", current_freq);
 }
