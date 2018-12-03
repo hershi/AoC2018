@@ -18,19 +18,15 @@ fn get_freq(input: &str) -> HashMap<char, i32> {
         })
 }
 
-fn has_exactly_2_or_3(input: &str) -> (bool, bool) {
-    let freq = get_freq(input);
-    (freq.values().any(|&x| x == 2), freq.values().any(|&x| x == 3))
-}
-
 fn main() {
     let input = read_input();
-    let res = input.clone()
-        .iter()
-        .map(|x| has_exactly_2_or_3(&x))
-        .fold((0,0), |acc, x| (acc.0 + if x.0 {1} else {0}, acc.1 + if x.1 {1} else {0}));
+    let input_freq = input.iter().map(|s| get_freq(&s)).collect::<Vec<HashMap<char, i32>>>();
+    let exactly_two : i32 =
+        input_freq.iter().map(|freq| if freq.values().any(|&x| x == 2) { 1 } else {0}).sum();
+    let exactly_three : i32 =
+        input_freq.iter().map(|freq| if freq.values().any(|&x| x == 3) { 1 } else {0}).sum();
 
-    println!("Result {:?}", res.0 * res.1);
+    println!("Result {:?}", exactly_two * exactly_three);
 
     'outer: for (i, x) in input.iter().enumerate() {
         for y in input.iter().skip(i) {
