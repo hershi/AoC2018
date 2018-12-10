@@ -79,20 +79,14 @@ impl Grid {
         (self.width * coordinates.1 + coordinates.0) as usize
     }
 
-    fn print(&self) {
-        for i in 0..self.height as usize{
-            for j in 0..self.width as usize {
-                print!("{:4}", self.grid[self.calculate_index((j as isize,i as isize))].0);
-            }
-            println!("");
-            //println!("{:?}###",
-                     //self.grid.iter()
-                        //.skip(self.width as usize *i)
-                        //.take(self.width as usize)
-                        //.map(|(x,y)|(*x))
-                        //.collect::<Vec<(i32)>>());
-        }
-    }
+    //fn print(&self) {
+        //for i in 0..self.height as usize{
+            //for j in 0..self.width as usize {
+                //print!("{:4}", self.grid[self.calculate_index((j as isize,i as isize))].0);
+            //}
+            //println!("");
+        //}
+    //}
 }
 
 fn part_1(input: &Vec<(isize, isize)>) {
@@ -116,17 +110,13 @@ fn part_1(input: &Vec<(isize, isize)>) {
         let current_gen_index = current_gen % 2;
         if stacks[current_gen_index].is_empty() { break; }
 
-        println!("Processing gen {} - num entries {}", current_gen, stacks[current_gen_index].len());
-
         let next_gen_index = (current_gen + 1) % 2;
 
         stacks[next_gen_index].clear();
 
         for entry in stacks[current_gen_index].iter() {
             if !grid.in_bounds(entry.coordinates) {
-                if infinite.insert(entry.ordinal) {
-                    println!("Adding {:?} to infinite", entry);
-                }
+                infinite.insert(entry.ordinal);
                 continue;
             }
 
@@ -134,17 +124,30 @@ fn part_1(input: &Vec<(isize, isize)>) {
             grid.set(entry);
         }
 
-        let mut next_gen = vec![];
+        let mut next_gen : HashMap<(isize, isize), (i32, i32)> = HashMap::new();
+
         for entry in stacks[current_gen_index].iter()
                 .filter(|e| grid.in_bounds(e.coordinates))
                 .filter(|e| grid.get(e.coordinates).1 == current_gen as i32) {
             let ordinal = grid.get(entry.coordinates).0;
-            next_gen.push(ProcessingEntry::new(ordinal, entry.gen + 1, (entry.coordinates.0 + 1, entry.coordinates.1)));
-            next_gen.push(ProcessingEntry::new(ordinal, entry.gen + 1, (entry.coordinates.0 - 1, entry.coordinates.1)));
-            next_gen.push(ProcessingEntry::new(ordinal, entry.gen + 1, (entry.coordinates.0, entry.coordinates.1 + 1)));
-            next_gen.push(ProcessingEntry::new(ordinal, entry.gen + 1, (entry.coordinates.0, entry.coordinates.1 - 1)));
+
+            next_gen.entry((entry.coordinates.0 + 1, entry.coordinates.1))
+                .and_modify(|e| if e.0 != entry.ordinal {e.0 = -1})
+                .or_insert((ordinal, entry.gen + 1));
+            next_gen.entry((entry.coordinates.0 - 1, entry.coordinates.1))
+                .and_modify(|e| if e.0 != entry.ordinal {e.0 = -1})
+                .or_insert((ordinal, entry.gen + 1));
+            next_gen.entry((entry.coordinates.0, entry.coordinates.1 + 1))
+                .and_modify(|e| if e.0 != entry.ordinal {e.0 = -1})
+                .or_insert((ordinal, entry.gen + 1));
+            next_gen.entry((entry.coordinates.0, entry.coordinates.1 - 1))
+                .and_modify(|e| if e.0 != entry.ordinal {e.0 = -1})
+                .or_insert((ordinal, entry.gen + 1));
         }
-        stacks[next_gen_index] = next_gen;
+        stacks[next_gen_index] = next_gen.iter()
+            .map(|(k,v)| ProcessingEntry::new(v.0, v.1, *k))
+            .collect();
+
 
         current_gen += 1;
         //grid.print();
@@ -157,10 +160,35 @@ fn part_1(input: &Vec<(isize, isize)>) {
         .fold(HashMap::new(), |mut acc, val| { *acc.entry(val).or_insert(0) += 1; acc });
 
     let item = freq.iter().max_by_key(|(_,v)|*v).unwrap();
+    println!("Frequencies {:?}", freq);
     println!("The winning item is {:?}", item);
+}
+
+fn valid(input: &Vec<(isize, isize)>, x: isize, y: isize) -> bool {
+    let max_distance = 10000;
+    input.iter()
+        .map(|(lx,ly)| ((lx-x).abs() + (ly-y).abs()) as usize)
+        .sum::<usize>() < max_distance
+}
+
+fn part_2(input: &Vec<(isize, isize)>) {
+    let max_x = input.iter().map(|(x,_)|x).max().unwrap();
+    let max_y = input.iter().map(|(_,y)|y).max().unwrap();
+
+    let mut counter = 0;
+    for i in 0..*max_x as isize {
+        for j in 0..*max_y as isize {
+            if valid(input, i,j) {
+                counter += 1;
+            }
+        }
+    }
+
+    println!("Result: {}", counter);
 }
 
 fn main() {
     let input = read_input();
     part_1(&input);
+    part_2(&input);
 }
