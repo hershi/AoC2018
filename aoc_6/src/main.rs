@@ -3,7 +3,6 @@ use std::io::BufReader;
 use std::fs::File;
 use std::collections::HashSet;
 use std::collections::HashMap;
-//use std::collections::HashMap;
 
 fn read_input() -> Vec<(isize, isize)> {
     let input_file = File::open("src/input.txt").unwrap();
