@@ -91,6 +91,7 @@ fn part2(blocks: &Edges, mut blocked_by: Edges, nodes: NodesSet) {
     let mut result = Vec::new();
 
     let base_time = 60;
+    let mut total_time = 0;
 
     loop {
         // Exit condition - no nodes currently under processing and
@@ -110,28 +111,30 @@ fn part2(blocks: &Edges, mut blocked_by: Edges, nodes: NodesSet) {
 
             for (node, worker) in sorted_ready.into_iter()
                 .zip(workers.iter_mut().filter(|x|x.is_none())) {
-                    let time = base_time + (node as u32 - 'A' as u32);
+                    let time = base_time + (node as u32 - 'A' as u32) + 1;
                     *worker = Some((node, time));
                     ready.remove(&node);
-                    result.push(node);
                 }
         }
 
         // Advance - advance the time until the next node becomes ready
         let next_step = workers.iter().flat_map(|x|x.map(|y|y.1)).min().unwrap();
+        total_time += next_step;
 
         // Collect any finished work, updating 'ready' accordingly
         for item in workers.iter_mut().filter(|x|x.is_some()) {
-            item.unwrap().1 -= next_step;
+            item.as_mut().unwrap().1 -= next_step;
+            //println!("item2: {:?}", item);
             if item.unwrap().1 == 0 {
                 let node = item.unwrap().0;
+                result.push(node);
                 *item = None;
                 finish_procesing(node, &blocks, &mut blocked_by, &mut ready);
             }
         }
     }
 
-    println!("Result: {}", result.iter().collect::<String>());
+    println!("Result: {} took {}", result.iter().collect::<String>(), total_time);
 }
 
 fn main() {
@@ -142,5 +145,5 @@ fn main() {
     println!("Blocked: {:?}", blocked_by);
 
     part1(&blocks, blocked_by.clone(), nodes.clone());
-    //part2(&blocks, blocked_by, nodes);
+    part2(&blocks, blocked_by, nodes);
 }
