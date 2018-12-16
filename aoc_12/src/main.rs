@@ -81,19 +81,23 @@ fn print_pots(pots: &Pots) {
     println!("");
 }
 
-fn main() {
-    let d = 50000000000;
-    let num_gens :isize = 1000;
-    let (mut pots, rules) = read_input();
-    print_pots(&pots);
-    for i in 0..num_gens {
-        if i % 1000 == 0 { println!("Gen {}", i); print_pots(&pots); }
+fn status_after(pots: &Pots, rules: &Rules, num_gens: isize, extrapolate: isize) {
+    let mut pots = pots.clone();
+    //print_pots(&pots);
+    for _i in 0..num_gens {
+        //if i % 1000 == 0 { println!("Gen {}", i); print_pots(&pots); }
 
         let new_pots = next_gen(&pots, &rules);
         if new_pots == pots { return; }
         pots = new_pots;
     }
-    print_pots(&pots);
+    //print_pots(&pots);
 
-    println!("Result 1: {}", pots.iter().map(|x|x+d-num_gens).sum::<isize>());
+    println!("Result: {}", pots.iter().map(|x|x+extrapolate-num_gens).sum::<isize>());
+}
+
+fn main() {
+    let (pots, rules) = read_input();
+    status_after(&pots, &rules, 20, 20);
+    status_after(&pots, &rules, 1000, 50_000_000_000);
 }
