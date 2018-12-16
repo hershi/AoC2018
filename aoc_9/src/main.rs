@@ -83,9 +83,9 @@ fn optimized() {
 
     for marble in 1..last_marble + 1 {
         //circle.print();
-        //if marble % 100 == 0  {
-            //println!("Current: {}", marble);
-        //}
+        if marble % 100 == 0  {
+            println!("Current: {}", marble);
+        }
         current_player = (current_player + 1) % players.len();
         if marble % special == 0 {
             circle.rewind(7);
