@@ -1,0 +1,6 @@
+[package]
+name = "aoc_14"
+version = "0.1.0"
+authors = ["Guy Hershenbaum <hershi@fb.com>"]
+
+[dependencies]

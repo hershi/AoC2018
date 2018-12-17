@@ -1,8 +1,8 @@
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs::File;
-
 use std::collections::HashMap;
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, PartialOrd, Ord)]
 struct Point {
     x: usize,
