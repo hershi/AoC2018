@@ -234,18 +234,36 @@ fn next_tick(rails: &Rails, carts: &mut Carts) {
     }
 }
 
-fn main() {
+fn part_1() {
     let (rails, mut carts) = read_input();
-    rails.iter().for_each(|c| println!("{:?}", c));
-
-    println!("");
-    carts.iter().for_each(|c| println!("{:?}", c));
-
-    print_state(&rails, &carts);
-
-    for i in 1..4 {
-        println!("\nTick {}", i);
+    let mut i = 0;
+    loop {
         next_tick(&rails, &mut carts);
-        print_state(&rails, &carts);
+        {
+            let crash = carts.iter().filter(|(_,c)| c.direction == Direction::Crash).last();
+            if let Some((pos, cart)) = crash {
+                println!("Crash at tick {}, position {:?} ({:?})", i, pos, cart);
+                print_state(&rails, &carts);
+                break;
+            }
+        }
+        i+= 1;
     }
+}
+
+fn part_2() {
+    let (rails, mut carts) = read_input();
+    let mut i = 0;
+    loop {
+        if i % 100 == 0 { println!("Tick {}, {} carts left", i, carts.len()); }
+        carts.retain(|_,c| c.direction != Direction::Crash);
+        if carts.len() <= 1 { println!("Finished on tick {} with cart: {:?}", i, carts.iter().last()); break; }
+        next_tick(&rails, &mut carts);
+        i+= 1;
+    }
+}
+
+fn main() {
+    part_1();
+    part_2();
 }
