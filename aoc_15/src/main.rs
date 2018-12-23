@@ -93,7 +93,7 @@ impl Warriors {
     fn get_turn_order(&self) -> Vec<IdType> {
         let mut warriors_vec = self.pos_to_id.iter()
             .collect::<Vec<(&Point, &IdType)>>();
-        warriors_vec.sort_by_key(|(pos, _)| *pos);
+        warriors_vec.sort_by_key(|(pos, _)| (pos.1, pos.0));
 
         warriors_vec.iter().map(|(_,id)| **id).collect()
     }
@@ -105,8 +105,15 @@ impl Warriors {
             .nth(0)
     }
 
-    fn get(&self, pos: &Point) -> Option<&Warrior> {
+    fn get_by_pos(&self, pos: &Point) -> Option<&Warrior> {
         self.pos_to_id.get(pos).and_then(|id|self.id_to_warrior.get(id))
+    }
+
+    fn get_by_race(&self, race: WarriorType) -> Vec<(&Point, &Warrior)> {
+        self.pos_to_id.iter()
+            .flat_map(|(pos, id)| self.id_to_warrior.get(id).and_then(|w|Some((pos,w))))
+            .filter(|(_, warrior)| warrior.race == race)
+            .collect()
     }
 }
 
@@ -159,42 +166,45 @@ impl Board {
 
     fn is_position_empty(&self, pos: &Point) -> bool {
         *self.map.get(pos) == Tile::Empty
-            && self.warriors.get(pos).is_none()
+            && self.warriors.get_by_pos(pos).is_none()
     }
 
     fn print(&self) {
         for y in 0..self.map.height {
             for x in 0..self.map.width {
                 let pos = (x,y);
-                print!("{}", self.warriors.get(&pos).map_or(self.map.get(&pos).to_char(), |w| w.to_char()));
+                print!("{}", self.warriors.get_by_pos(&pos).map_or(self.map.get(&pos).to_char(), |w| w.to_char()));
             }
             println!("");
         }
     }
 }
 
-fn flood_fill(board: &Board, starting_pos: &Point) -> Map<i32> {
-    let mut ff_map = Map::<i32> {
+fn flood_fill(board: &Board, starting_pos: &Point) -> Map<(i32, Point)> {
+    let mut ff_map = Map::<(i32, Point)> {
         width: board.map.width,
         height: board.map.height,
-        grid: vec![std::i32::MAX; board.map.width * board.map.height],
+        grid: vec![(std::i32::MAX, (0,0)); board.map.width * board.map.height],
     };
 
-    ff_map.set(&starting_pos, 0);
+    ff_map.set(&starting_pos, (0,(0,0)));
 
     let mut distance = 1;
-    let mut next_round = board.map.get_neighbours(starting_pos);
+    let mut next_round =
+        board.map.get_neighbours(starting_pos).into_iter()
+            .map(|p| (p, *starting_pos))
+            .collect::<Vec<(Point, Point)>>();
 
     while next_round.len() > 0 {
         let mut current_round = next_round;
         next_round = vec![];
 
         current_round.iter()
-            .filter(|p| board.is_position_empty(p))
-            .for_each(|p| {
-                if *ff_map.get(p) < distance { return; }
-                ff_map.set(p, distance);
-                next_round.append(&mut board.map.get_neighbours(&p));
+            .filter(|(p, _)| board.is_position_empty(p))
+            .for_each(|(p, from)| {
+                if ff_map.get(p).0 <= distance { return; }
+                ff_map.set(p, (distance, *from));
+                next_round.append(&mut  board.map.get_neighbours(&p).into_iter().map(|neighbour|(neighbour, *p)).collect());
             });
 
         distance += 1;
@@ -203,27 +213,60 @@ fn flood_fill(board: &Board, starting_pos: &Point) -> Map<i32> {
     ff_map
 }
 
+fn has_adjacent_enemy(board: &Board, pos: &Point, race: &WarriorType) -> bool {
+     board.map.get_neighbours(pos).iter()
+        .flat_map(|p|board.warriors.get_by_pos(p))
+        .any(|w| &w.race != race)
+}
+
 fn next_turn(board: &mut Board, pos: &Point) {
     // Do I have an adjacent enemy?
     //if adjacent_enemies(map, pos).is_some() { map.set(0,0, Tile::Empty); }
-    let race = &board.warriors.get(pos).unwrap().race;
+    let warrior = board.warriors.get_by_pos(pos).unwrap().clone();
 
-    let has_adjacent_enemy = board.map.get_neighbours(pos).iter()
-        .flat_map(|p|board.warriors.get(p))
-        .any(|w| &w.race != race);
-
-    if !has_adjacent_enemy {
+    if !has_adjacent_enemy(board, pos, &warrior.race) {
+        // Perform a flood fill
+        //
+        // Opimization opportunity: We don't really need to perform a full flood fill -
+        // we can stop at the end of the first "generation" in which we reach a spot
+        // adjacent to an enemy.
         let ff_map = flood_fill(board, pos);
-        println!();
-            for y in 0..ff_map.height {
-                for x in 0..ff_map.width {
-                    let pos = (x,y);
-                    print!("{:3}", if *ff_map.get(&pos) < 1000 { ff_map.get(&pos) } else { &-1 });
-                }
-                println!("");
+        //println!();
+            //for y in 0..ff_map.height {
+                //for x in 0..ff_map.width {
+                    //let pos = (x,y);
+                    //print!("{:3}", if ff_map.get(&pos).0 < 1000 { ff_map.get(&pos).0 } else { -1 });
+                //}
+                //println!("");
+            //}
+        //println!();
+
+        // Find all spots that are adjacent to an enemy and are reachable,
+        // and pick the one that is closest, resoving ties based on reading-order
+        let enemy_race =
+            if warrior.race == WarriorType::Elf { WarriorType::Goblin } else { WarriorType:: Elf};
+        let target = board.warriors.get_by_race(enemy_race).iter()
+            .flat_map(|(pos, _)| board.map.get_neighbours(pos))
+            .filter(|pos| ff_map.get(pos).0 != std::i32::MAX)
+            .min_by(|p1, p2| ff_map.get(p1).0.cmp(&ff_map.get(p2).0)
+                                .then((p1.1,p1.0).cmp(&(p2.1, p2.0))));
+
+        // If we found a target, backtrack to the first step
+        // Since we're following the reading order when performing the
+        // flood fill, this should satisfy the reading-order requirement
+        if let Some(mut target) = target {
+            while ff_map.get(&target).1 != *pos {
+                target = ff_map.get(&target).1;
+                //println!("  {:?}", target);
             }
-        println!();
+            //println!("{:?} --> {:?}", pos, target);
+            board.warriors.pos_to_id.remove(pos);
+            board.warriors.pos_to_id.insert(target, warrior.id);
+        }
     }
+
+    //if has_adjacent_enemy(board, , race) {
+    //}
 }
 
 fn next_round(board: &mut Board) {
