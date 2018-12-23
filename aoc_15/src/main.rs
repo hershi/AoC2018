@@ -49,17 +49,32 @@ struct Map<T> {
 }
 
 impl<T> Map<T> {
-    fn get(&self, x: usize, y: usize) -> &T {
-        &self.grid[self.calculate_index(x,y)]
+    fn get(&self, pos: &Point) -> &T {
+        &self.grid[self.calculate_index(pos)]
     }
 
-    fn calculate_index(&self, x: usize, y: usize) -> usize {
-        (self.width * y + x) as usize
+    fn calculate_index(&self, pos: &Point) -> usize {
+        (self.width * pos.1 + pos.0) as usize
     }
 
-    fn set(&mut self, x: usize, y: usize, val: T) {
-        self.grid[self.height * y + x] = val;
+    fn set(&mut self, pos: &Point, val: T) {
+        self.grid[self.height * pos.1 + pos.0] = val;
     }
+
+    fn get_neighbours(&self, pos: &Point) -> Vec<Point> {
+        let pos = (pos.0 as isize, pos.1 as isize);
+        vec![
+            (pos.0, pos.1 - 1),
+            (pos.0 - 1 , pos.1),
+            (pos.0 + 1 , pos.1),
+            (pos.0, pos.1 + 1),
+        ].into_iter()
+            .filter(|p| p.0 >= 0 && p.0 < self.width as isize
+                    && p.1 >= 0 && p.1 < self.height as isize)
+            .map(|p|(p.0 as usize, p.1 as usize))
+            .collect()
+    }
+
 }
 
 type Point = (usize, usize);
@@ -124,7 +139,7 @@ impl Board {
             .flat_map(|line|line.chars())
             .enumerate()
             .flat_map(|(i,c)| {
-                let pos = (i/width, i%width);
+                let pos = (i%width, i/width);
                 match c {
                     'E' => Some((pos, WarriorType::Elf)),
                     'G' => Some((pos, WarriorType::Goblin)),
@@ -142,20 +157,73 @@ impl Board {
         Board {map: Map { width, height, grid}, warriors }
     }
 
+    fn is_position_empty(&self, pos: &Point) -> bool {
+        *self.map.get(pos) == Tile::Empty
+            && self.warriors.get(pos).is_none()
+    }
+
     fn print(&self) {
         for y in 0..self.map.height {
             for x in 0..self.map.width {
-                print!("{}", self.warriors.get(&(x, y)).map_or(self.map.get(x,y).to_char(), |w| w.to_char()));
+                let pos = (x,y);
+                print!("{}", self.warriors.get(&pos).map_or(self.map.get(&pos).to_char(), |w| w.to_char()));
             }
             println!("");
         }
     }
 }
 
-fn next_turn(board: &mut Board, pos: Point) {
+fn flood_fill(board: &Board, starting_pos: &Point) -> Map<i32> {
+    let mut ff_map = Map::<i32> {
+        width: board.map.width,
+        height: board.map.height,
+        grid: vec![std::i32::MAX; board.map.width * board.map.height],
+    };
+
+    ff_map.set(&starting_pos, 0);
+
+    let mut distance = 1;
+    let mut next_round = board.map.get_neighbours(starting_pos);
+
+    while next_round.len() > 0 {
+        let mut current_round = next_round;
+        next_round = vec![];
+
+        current_round.iter()
+            .filter(|p| board.is_position_empty(p))
+            .for_each(|p| {
+                if *ff_map.get(p) < distance { return; }
+                ff_map.set(p, distance);
+                next_round.append(&mut board.map.get_neighbours(&p));
+            });
+
+        distance += 1;
+    }
+
+    ff_map
+}
+
+fn next_turn(board: &mut Board, pos: &Point) {
     // Do I have an adjacent enemy?
     //if adjacent_enemies(map, pos).is_some() { map.set(0,0, Tile::Empty); }
-    board.map.set(0,0, Tile::Empty);
+    let race = &board.warriors.get(pos).unwrap().race;
+
+    let has_adjacent_enemy = board.map.get_neighbours(pos).iter()
+        .flat_map(|p|board.warriors.get(p))
+        .any(|w| &w.race != race);
+
+    if !has_adjacent_enemy {
+        let ff_map = flood_fill(board, pos);
+        println!();
+            for y in 0..ff_map.height {
+                for x in 0..ff_map.width {
+                    let pos = (x,y);
+                    print!("{:3}", if *ff_map.get(&pos) < 1000 { ff_map.get(&pos) } else { &-1 });
+                }
+                println!("");
+            }
+        println!();
+    }
 }
 
 fn next_round(board: &mut Board) {
@@ -165,7 +233,7 @@ fn next_round(board: &mut Board) {
     for id in turn_order {
         let warrior_pos = board.warriors.find_warrior_pos_by_id(id);
         match warrior_pos {
-            Some(pos) => next_turn(board, pos),
+            Some(pos) => next_turn(board, &pos),
             None => (),
         };
     }
@@ -178,3 +246,5 @@ fn main() {
     next_round(&mut board);
     board.print();
 }
+
+
