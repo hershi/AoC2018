@@ -2,6 +2,7 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs::File;
 use std::collections::HashMap;
+use std::ops::Fn;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, PartialOrd, Ord)]
 enum Tile {
@@ -28,13 +29,19 @@ type IdType = usize;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, PartialOrd, Ord)]
 struct Warrior {
-    race: WarriorType,
+    warrior_type: WarriorType,
     id: IdType,
+    hp: i32,
+    attack: i32
 }
 
 impl Warrior {
+    fn new(warrior_type: WarriorType, id: IdType, attack: i32) -> Warrior {
+        Warrior{warrior_type, id, hp: 200, attack}
+    }
+
     fn to_char(&self) -> char{
-        match self.race {
+        match self.warrior_type {
             WarriorType::Elf => 'E',
             WarriorType::Goblin => 'G',
         }
@@ -109,10 +116,10 @@ impl Warriors {
         self.pos_to_id.get(pos).and_then(|id|self.id_to_warrior.get(id))
     }
 
-    fn get_by_race(&self, race: WarriorType) -> Vec<(&Point, &Warrior)> {
+    fn get_by_warrior_type(&self, warrior_type: WarriorType) -> Vec<(&Point, &Warrior)> {
         self.pos_to_id.iter()
             .flat_map(|(pos, id)| self.id_to_warrior.get(id).and_then(|w|Some((pos,w))))
-            .filter(|(_, warrior)| warrior.race == race)
+            .filter(|(_, warrior)| warrior.warrior_type == warrior_type)
             .collect()
     }
 }
@@ -123,7 +130,7 @@ struct Board {
 }
 
 impl Board {
-    fn from_input() -> Board {
+    fn from_input(elf_attack: i32) -> Board {
         let input_file = File::open("src/input.txt").unwrap();
         let reader = BufReader::new(input_file);
 
@@ -153,11 +160,12 @@ impl Board {
                     _ => None,
                 }
             })
-            .fold(Warriors::new(), |mut acc, (pos, race)| {
+            .fold(Warriors::new(), |mut acc, (pos, warrior_type)| {
                 let id = acc.next_id;
+                let attack = if warrior_type == WarriorType::Elf { elf_attack } else { 3 };
                 acc.next_id += 1;
                 acc.pos_to_id.insert(pos, id);
-                acc.id_to_warrior.insert(id, Warrior { race, id });
+                acc.id_to_warrior.insert(id, Warrior::new( warrior_type, id, attack ));
                 acc
             });
 
@@ -167,6 +175,11 @@ impl Board {
     fn is_position_empty(&self, pos: &Point) -> bool {
         *self.map.get(pos) == Tile::Empty
             && self.warriors.get_by_pos(pos).is_none()
+    }
+
+    fn is_combat_finished(&self) -> bool {
+        !self.warriors.id_to_warrior.values().any(|w| w.warrior_type == WarriorType::Elf)
+            || !self.warriors.id_to_warrior.values().any(|w| w.warrior_type == WarriorType::Goblin)
     }
 
     fn print(&self) {
@@ -196,7 +209,7 @@ fn flood_fill(board: &Board, starting_pos: &Point) -> Map<(i32, Point)> {
             .collect::<Vec<(Point, Point)>>();
 
     while next_round.len() > 0 {
-        let mut current_round = next_round;
+        let current_round = next_round;
         next_round = vec![];
 
         current_round.iter()
@@ -213,24 +226,26 @@ fn flood_fill(board: &Board, starting_pos: &Point) -> Map<(i32, Point)> {
     ff_map
 }
 
-fn has_adjacent_enemy(board: &Board, pos: &Point, race: &WarriorType) -> bool {
-     board.map.get_neighbours(pos).iter()
-        .flat_map(|p|board.warriors.get_by_pos(p))
-        .any(|w| &w.race != race)
+fn get_adjacent_enemies<'a>(board: &'a Board, pos: &Point, warrior_type: &WarriorType) -> Vec<(Point, &'a Warrior)> {
+     board.map.get_neighbours(pos).into_iter()
+        .flat_map(|p| board.warriors.get_by_pos(&p).and_then(|w|Some((p,w))))
+        .filter(|(_,w)| &w.warrior_type != warrior_type)
+        .collect::<Vec<(Point, &Warrior)>>()
 }
 
-fn next_turn(board: &mut Board, pos: &Point) {
+fn next_turn(board: &mut Board, warrior_pos: &Point) {
     // Do I have an adjacent enemy?
     //if adjacent_enemies(map, pos).is_some() { map.set(0,0, Tile::Empty); }
-    let warrior = board.warriors.get_by_pos(pos).unwrap().clone();
+    let warrior = board.warriors.get_by_pos(warrior_pos).unwrap().clone();
 
-    if !has_adjacent_enemy(board, pos, &warrior.race) {
+    let mut warrior_pos = *warrior_pos;
+    if get_adjacent_enemies(board, &warrior_pos, &warrior.warrior_type).is_empty() {
         // Perform a flood fill
         //
         // Opimization opportunity: We don't really need to perform a full flood fill -
         // we can stop at the end of the first "generation" in which we reach a spot
         // adjacent to an enemy.
-        let ff_map = flood_fill(board, pos);
+        let ff_map = flood_fill(board, &warrior_pos);
         //println!();
             //for y in 0..ff_map.height {
                 //for x in 0..ff_map.width {
@@ -243,9 +258,9 @@ fn next_turn(board: &mut Board, pos: &Point) {
 
         // Find all spots that are adjacent to an enemy and are reachable,
         // and pick the one that is closest, resoving ties based on reading-order
-        let enemy_race =
-            if warrior.race == WarriorType::Elf { WarriorType::Goblin } else { WarriorType:: Elf};
-        let target = board.warriors.get_by_race(enemy_race).iter()
+        let enemy_warrior_type =
+            if warrior.warrior_type == WarriorType::Elf { WarriorType::Goblin } else { WarriorType:: Elf};
+        let target = board.warriors.get_by_warrior_type(enemy_warrior_type).iter()
             .flat_map(|(pos, _)| board.map.get_neighbours(pos))
             .filter(|pos| ff_map.get(pos).0 != std::i32::MAX)
             .min_by(|p1, p2| ff_map.get(p1).0.cmp(&ff_map.get(p2).0)
@@ -255,39 +270,114 @@ fn next_turn(board: &mut Board, pos: &Point) {
         // Since we're following the reading order when performing the
         // flood fill, this should satisfy the reading-order requirement
         if let Some(mut target) = target {
-            while ff_map.get(&target).1 != *pos {
+            while ff_map.get(&target).1 != warrior_pos {
                 target = ff_map.get(&target).1;
                 //println!("  {:?}", target);
             }
             //println!("{:?} --> {:?}", pos, target);
-            board.warriors.pos_to_id.remove(pos);
+            board.warriors.pos_to_id.remove(&warrior_pos);
             board.warriors.pos_to_id.insert(target, warrior.id);
+            warrior_pos = target;
         }
     }
 
-    //if has_adjacent_enemy(board, , race) {
-    //}
+    if let Some((pos, id)) =
+        get_adjacent_enemies(board, &warrior_pos, &warrior.warrior_type).iter()
+            .min_by(|w1, w2| w1.1.hp.cmp(&w2.1.hp)
+                .then(((w1.0).1, (w1.0).0).cmp(&((w2.0).1, (w2.0).0))))
+            .map(|(pos, w)| (*pos, w.id)) {
+        board.warriors.pos_to_id.remove(&pos);
+        let mut enemy = board.warriors.id_to_warrior.remove(&id).unwrap();
+        enemy.hp -= warrior.attack;
+        if enemy.hp > 0 {
+            board.warriors.id_to_warrior.insert(id, enemy);
+            board.warriors.pos_to_id.insert(pos, id);
+        }
+    }
 }
 
-fn next_round(board: &mut Board) {
+// Go through the next round. Return `true` if combat is done at any
+// point in the round, `false` otherwise
+fn next_round(board: &mut Board) -> bool {
     // For every Warrior, in reading order, take the next step
     let turn_order = board.warriors.get_turn_order();
 
     for id in turn_order {
         let warrior_pos = board.warriors.find_warrior_pos_by_id(id);
         match warrior_pos {
-            Some(pos) => next_turn(board, &pos),
+            Some(pos) => {
+                if board.is_combat_finished() { return true; }
+                next_turn(board, &pos);
+            },
             None => (),
         };
+    }
+
+    // Combat not finished yet
+    return false;
+}
+
+fn perform_combat<F>(mut board: Board, eval: F,  twarrior_type: bool) -> Result<(i32, Board), (i32, Board)>
+        where F: Fn(&Board) -> bool {
+    if twarrior_type { board.print(); }
+
+    let mut round_counter = 0;
+    while !next_round(&mut board) {
+        if twarrior_type {
+            println!("End of round {}", round_counter);
+            board.print();
+        }
+
+        if !eval(&board) { return Err((round_counter, board)); }
+        round_counter += 1;
+    }
+
+    if twarrior_type { board.print(); }
+
+    Ok((round_counter, board))
+}
+
+fn run_simulation(elf_attack: i32) -> bool {
+    let board = Board::from_input(elf_attack);
+    let num_elves = board.warriors.id_to_warrior.values().filter(|w|w.warrior_type == WarriorType::Elf).count();
+    let res = perform_combat(board,
+                   |board|num_elves == board.warriors.id_to_warrior.values().filter(|w|w.warrior_type == WarriorType::Elf).count(),
+                   false);
+    match res {
+        Ok((round_counter, board)) => {
+            let total_hp = board.warriors.id_to_warrior.values()
+                .map(|w|w.hp)
+                .sum::<i32>();
+
+            println!("Elf attack {}. Finished on round {}. All units' HP is {}. Result {}",
+                     elf_attack,
+                     round_counter,
+                     total_hp,
+                     round_counter * total_hp);
+            true
+        },
+        Err((round_counter, board)) => {
+            println!("Elf attack {}. Error on round {}. An elf has died.",
+                     elf_attack,
+                     round_counter);
+            false
+        },
     }
 }
 
 fn main() {
-    let mut board = Board::from_input();
-    board.print();
+    let mut lower = 3;
+    let mut upper = 200;
 
-    next_round(&mut board);
-    board.print();
+    while upper >= lower {
+        let elf_attack = lower + (upper - lower)/2;
+        println!("Upper,Lower,ElfAttack {},{},{}", upper, lower, elf_attack);
+        if run_simulation(elf_attack) {
+            upper = elf_attack - 1;
+        } else {
+            lower = elf_attack + 1;
+        }
+    }
 }
 
 
