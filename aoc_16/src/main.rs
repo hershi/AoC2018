@@ -141,7 +141,7 @@ fn part_1(samples: &Vec<Sample>) {
         .filter(|x| x >= &3)
         .count();
 
-    println!("# of samples matching exactly 3 operators: {}", res);
+    println!("# of samples matching 3 or more operators: {}", res);
 }
 
 fn resolve_opcodes(samples: &Vec<Sample>) -> Vec<&'static Fn(i32, i32, i32, &Registers) -> Registers> {
