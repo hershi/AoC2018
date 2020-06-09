@@ -113,6 +113,10 @@ impl Map {
         self.vals.get(p).unwrap_or(&Tile::Empty)
     }
 
+    fn set(&mut self, p: &Point, val: &Tile) {
+        abcd
+    }
+
     fn print(&self) {
         let x_range = self.vals.keys()
             .map(|&(x,_)|x)
